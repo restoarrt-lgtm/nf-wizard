@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>НФ Визард — РестоАрт</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #f5f4f0; color: #2c2c2a; min-height: 100vh; }
+.container { max-width: 780px; margin: 0 auto; padding: 2rem 1.5rem; }
+.logo { font-size: 13px; color: #888; margin-bottom: 2rem; letter-spacing: 0.05em; text-transform: uppercase; }
+h1 { font-size: 22px; font-weight: 600; margin-bottom: 0.5rem; }
+.subtitle { font-size: 14px; color: #666; margin-bottom: 2rem; }
+.screen { display: none; }
+.screen.active { display: block; }
+label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; margin-top: 1rem; }
+textarea, input[type=text] { width: 100%; font-size: 14px; font-family: Arial, sans-serif; border: 1px solid #ddd; border-radius: 8px; padding: 10px 12px; background: #fff; color: #2c2c2a; outline: none; transition: border 0.2s; }
+textarea:focus, input:focus { border-color: #2c2c2a; }
+textarea { resize: vertical; min-height: 160px; line-height: 1.6; }
+.btn { font-size: 14px; cursor: pointer; padding: 10px 22px; border-radius: 8px; font-family: Arial, sans-serif; font-weight: 500; transition: opacity 0.2s; }
+.btn-primary { background: #2c2c2a; color: #fff; border: none; }
+.btn-primary:hover { opacity: 0.8; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-ghost { background: transparent; border: 1px solid #ccc; color: #666; }
+.btn-ghost:hover { border-color: #999; color: #333; }
+.row-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; }
+.card { background: #fff; border: 1px solid #e8e6e0; border-radius: 10px; padding: 0.875rem 1rem; margin-bottom: 8px; }
+.card-inner { display: flex; align-items: flex-start; gap: 10px; }
+.card-num { width: 24px; height: 24px; border-radius: 50%; background: #f0ede6; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #888; flex-shrink: 0; margin-top: 2px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1.6fr 1.4fr; gap: 8px; flex: 1; }
+.grid3 label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 0; }
+.grid3 input { font-size: 13px; padding: 7px 10px; }
+.del-btn { background: none; border: none; cursor: pointer; color: #bbb; font-size: 20px; line-height: 1; padding: 0 2px; flex-shrink: 0; }
+.del-btn:hover { color: #e55; }
+.add-btn { background: none; border: none; cursor: pointer; color: #2c2c2a; font-size: 13px; padding: 6px 0; margin-top: 4px; display: flex; align-items: center; gap: 5px; font-family: Arial, sans-serif; }
+.add-btn:hover { opacity: 0.6; }
+.tabs { display: flex; border-bottom: 1px solid #e0ded8; margin-bottom: 1.25rem; margin-top: 1.5rem; }
+.tab { padding: 8px 18px; font-size: 13px; cursor: pointer; border: none; background: none; color: #888; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: Arial, sans-serif; }
+.tab.on { color: #2c2c2a; border-bottom-color: #2c2c2a; font-weight: 600; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+.rule-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.rule-row input { flex: 1; }
+.rule-num { font-size: 12px; color: #aaa; min-width: 20px; text-align: right; flex-shrink: 0; }
+.ckp-box { background: #fff; border: 1px solid #e8e6e0; border-radius: 10px; padding: 0.875rem 1rem; margin-bottom: 0; }
+.ckp-box label { margin-top: 0; font-weight: 600; color: #2c2c2a; font-size: 12px; }
+.ckp-box input { border: none; padding: 4px 0; font-size: 15px; font-weight: 500; background: transparent; }
+.ckp-box input:focus { border: none; outline: none; }
+.hint { font-size: 12px; color: #aaa; margin-top: 6px; line-height: 1.5; }
+.section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #aaa; margin-top: 1.5rem; margin-bottom: 10px; }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid #ddd; border-top-color: #2c2c2a; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: -4px; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-screen { text-align: center; padding: 4rem 0; }
+.loading-screen p { color: #666; font-size: 15px; }
+.col-headers { display: grid; grid-template-columns: 1fr 1.6fr 1.4fr; gap: 8px; padding-left: 34px; margin-bottom: 6px; }
+.col-headers span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #aaa; }
+.rules-count { font-size: 11px; background: #f0ede6; padding: 2px 7px; border-radius: 10px; margin-left: 5px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">РестоАрт · НФ Визард</div>
+
+  <!-- Экран 1: Ввод -->
+  <div class="screen active" id="sc-input">
+    <h1>Новый процесс</h1>
+    <p class="subtitle">Опиши процесс своими словами — Claude разберёт шаги и правила сам.</p>
+
+    <label>Описание процесса</label>
+    <textarea id="raw-desc" placeholder="Расскажи как это происходит — как коллеге. Кто участвует, что делает, какие инструменты, исключения, нормы, сроки..."></textarea>
+    <p class="hint">Не нужно структурировать — просто опиши.</p>
+
+    <label>Название процесса <span style="color:#bbb">(необязательно)</span></label>
+    <input type="text" id="proc-name" placeholder="например: Обработка рекламации" />
+
+    <label>Отдел-владелец</label>
+    <input type="text" id="proc-dept" placeholder="например: Логистический отдел" />
+
+    <div class="row-actions" style="justify-content: flex-end; margin-top: 1.5rem;">
+      <button class="btn btn-primary" id="btn-analyze" onclick="analyze()">Разобрать на шаги →</button>
+    </div>
+    <div id="err-msg" style="color:#c00; font-size:13px; margin-top:10px; display:none;"></div>
+  </div>
+
+  <!-- Экран 2: Загрузка -->
+  <div class="screen" id="sc-loading">
+    <div class="loading-screen">
+      <p><span class="spinner"></span>Claude разбирает описание...</p>
+    </div>
+  </div>
+
+  <!-- Экран 3: Редактирование -->
+  <div class="screen" id="sc-review">
+    <h1 id="review-title">Проверь и отредактируй</h1>
+    <p class="subtitle">Измени любое поле, удали лишнее или добавь своё.</p>
+
+    <div class="ckp-box">
+      <label>ЦКП — целевой конечный продукт</label>
+      <input type="text" id="ckp-val" placeholder="Идеальный результат процесса..." />
+    </div>
+
+    <div class="tabs">
+      <button class="tab on" onclick="switchTab('nf',this)">НФ — шаги</button>
+      <button class="tab" onclick="switchTab('rules',this)">Правила <span class="rules-count" id="rules-count">0</span></button>
+    </div>
+
+    <div class="tab-panel active" id="tab-nf">
+      <div class="col-headers">
+        <span>Быть</span><span>Делать</span><span>Иметь</span>
+      </div>
+      <div id="steps-wrap"></div>
+      <button class="add-btn" onclick="addStepRow()">+ Добавить шаг</button>
+    </div>
+
+    <div class="tab-panel" id="tab-rules">
+      <p class="hint" style="margin-bottom:12px;">Каждый пункт — самостоятельное условие или норма.</p>
+      <div id="rules-wrap"></div>
+      <button class="add-btn" onclick="addRuleRow()">+ Добавить правило</button>
+    </div>
+
+    <div class="row-actions" style="margin-top: 2rem;">
+      <button class="btn btn-ghost" onclick="show('sc-input')">← Изменить описание</button>
+      <button class="btn btn-primary" onclick="generate()">Сгенерировать 3 документа →</button>
+    </div>
+  </div>
+
+  <!-- Экран 4: Генерация -->
+  <div class="screen" id="sc-generating">
+    <div class="loading-screen">
+      <p><span class="spinner"></span>Генерируем документы...</p>
+    </div>
+  </div>
+
+  <!-- Экран 5: Готово -->
+  <div class="screen" id="sc-done">
+    <h1>Документы готовы</h1>
+    <p class="subtitle" style="margin-bottom: 2rem;">Скачай файлы ниже.</p>
+    <div id="download-links" style="display:flex; flex-direction:column; gap:10px;"></div>
+    <div class="row-actions" style="margin-top: 2rem; justify-content: flex-start;">
+      <button class="btn btn-ghost" onclick="show('sc-input')">← Новый процесс</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API_BASE = '';
+
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('on');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function addStepRow(byt, del, imet) {
+  byt=byt||''; del=del||''; imet=imet||'';
+  const wrap = document.getElementById('steps-wrap');
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.innerHTML = `<div class="card-inner"><div class="card-num step-num">${wrap.children.length+1}</div><div class="grid3"><div><label>Быть</label><input type="text" class="f-byt" placeholder="Кто" /></div><div><label>Делать</label><input type="text" class="f-del" placeholder="Что делает" /></div><div><label>Иметь</label><input type="text" class="f-imet" placeholder="Инструменты" /></div></div><button class="del-btn" onclick="removeStep(this)">&times;</button></div>`;
+  wrap.appendChild(div);
+  div.querySelector('.f-byt').value = byt;
+  div.querySelector('.f-del').value = del;
+  div.querySelector('.f-imet').value = imet;
+}
+
+function removeStep(btn) { btn.closest('.card').remove(); renumberSteps(); }
+function renumberSteps() {
+  document.querySelectorAll('#steps-wrap .step-num').forEach((n,i) => n.textContent=i+1);
+}
+
+function addRuleRow(text) {
+  const wrap = document.getElementById('rules-wrap');
+  const div = document.createElement('div');
+  div.className = 'rule-row';
+  div.innerHTML = `<span class="rule-num">${wrap.children.length+1}</span><input type="text" placeholder="Условие или норма..." /><button class="del-btn" onclick="removeRule(this)">&times;</button>`;
+  wrap.appendChild(div);
+  if (text) div.querySelector('input').value = text;
+  updateRulesCount();
+}
+
+function removeRule(btn) { btn.closest('.rule-row').remove(); renumberRules(); }
+function renumberRules() {
+  document.querySelectorAll('#rules-wrap .rule-num').forEach((n,i) => n.textContent=i+1);
+  updateRulesCount();
+}
+function updateRulesCount() {
+  document.getElementById('rules-count').textContent = document.querySelectorAll('#rules-wrap .rule-row').length;
+}
+
+function getSteps() {
+  return Array.from(document.querySelectorAll('#steps-wrap .card')).map(c => ({
+    byt: c.querySelector('.f-byt').value.trim(),
+    del: c.querySelector('.f-del').value.trim(),
+    imet: c.querySelector('.f-imet').value.trim()
+  })).filter(r => r.byt||r.del);
+}
+
+function getRules() {
+  return Array.from(document.querySelectorAll('#rules-wrap input')).map(i=>i.value.trim()).filter(Boolean);
+}
+
+async function analyze() {
+  const desc = document.getElementById('raw-desc').value.trim();
+  if (!desc) { showErr('Введи описание процесса'); return; }
+  hideErr();
+  show('sc-loading');
+
+  const name = document.getElementById('proc-name').value.trim();
+  const dept = document.getElementById('proc-dept').value.trim();
+
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ desc, name, dept })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    document.getElementById('ckp-val').value = data.ckp || '';
+    document.getElementById('review-title').textContent = name || 'Проверь и отредактируй';
+    document.getElementById('steps-wrap').innerHTML = '';
+    document.getElementById('rules-wrap').innerHTML = '';
+    (data.steps||[]).forEach(s => addStepRow(s.byt, s.delat, s.imet));
+    (data.rules||[]).forEach(r => addRuleRow(r));
+    updateRulesCount();
+    show('sc-review');
+  } catch(e) {
+    show('sc-input');
+    showErr('Ошибка: ' + e.message);
+  }
+}
+
+async function generate() {
+  const steps = getSteps();
+  const rules = getRules();
+  const ckp = document.getElementById('ckp-val').value.trim();
+  const name = document.getElementById('proc-name').value.trim() || 'Процесс';
+  const dept = document.getElementById('proc-dept').value.trim();
+
+  show('sc-generating');
+
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ steps, rules, ckp, name, dept })
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    const links = document.getElementById('download-links');
+    links.innerHTML = '';
+    data.files.forEach(f => {
+      const a = document.createElement('a');
+      a.href = f.url;
+      a.download = f.name;
+      a.style.cssText = 'display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e0ded8;border-radius:10px;padding:12px 16px;text-decoration:none;color:#2c2c2a;font-size:14px;font-weight:500;';
+      a.innerHTML = `<span style="font-size:20px">${f.icon}</span>${f.name}`;
+      links.appendChild(a);
+    });
+    show('sc-done');
+  } catch(e) {
+    show('sc-review');
+    alert('Ошибка генерации: ' + e.message);
+  }
+}
+
+function showErr(msg) {
+  const b = document.getElementById('err-msg');
+  b.textContent = msg; b.style.display = 'block';
+}
+function hideErr() { document.getElementById('err-msg').style.display = 'none'; }
+</script>
+</body>
+</html>
