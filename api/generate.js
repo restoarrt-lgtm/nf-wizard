@@ -90,30 +90,34 @@ function crc32(buf) {
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
-function makeDocxZip(title, subject, stepsWithDesc, rules, dept) {
+function makeDocxZip(title, subject, content, dept) {
   const paras = [];
 
   paras.push(`<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="100"/></w:pPr><w:r><w:rPr><w:sz w:val="48"/><w:szCs w:val="48"/></w:rPr><w:t>${esc(title)}</w:t></w:r></w:p>`);
   paras.push(`<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="100" w:after="180"/></w:pPr><w:r><w:rPr><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr><w:t>${esc(subject)}</w:t></w:r></w:p>`);
 
-  if (rules) {
-    rules.forEach((r, i) => {
-      paras.push(`<w:p><w:pPr><w:spacing w:before="140" w:after="80"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t>${i+1}. ${esc(r)}</w:t></w:r></w:p>`);
-      paras.push(`<w:p/>`);
-    });
-  } else {
-    stepsWithDesc.forEach((s, i) => {
-      paras.push(`<w:p><w:pPr><w:spacing w:before="200" w:after="80"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t>Шаг ${i+1}. ${esc(s.title)}</w:t></w:r></w:p>`);
-      paras.push(`<w:p><w:pPr><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">Описание шага: ${esc(s.desc)}</w:t></w:r></w:p>`);
-    });
+  for (const block of content) {
+    if (block.type === 'intro') {
+      paras.push(`<w:p><w:pPr><w:jc w:val="both"/><w:spacing w:after="200"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">${esc(block.text)}</w:t></w:r></w:p>`);
+    } else if (block.type === 'step') {
+      paras.push(`<w:p><w:pPr><w:spacing w:before="200" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t>${esc(block.num)}. ${esc(block.title)}</w:t></w:r></w:p>`);
+      paras.push(`<w:p><w:pPr><w:jc w:val="both"/><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">${esc(block.desc)}</w:t></w:r></w:p>`);
+    } else if (block.type === 'protocol') {
+      paras.push(`<w:p><w:pPr><w:spacing w:before="160" w:after="0"/><w:pBdr><w:top w:val="single" w:sz="4" w:space="4" w:color="888888"/></w:pBdr></w:pPr></w:p>`);
+      paras.push(`<w:p><w:pPr><w:spacing w:before="80" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="24"/></w:rPr><w:t>${esc(block.title)}</w:t></w:r></w:p>`);
+      for (const ps of block.steps) {
+        const prefix = block.steps.length > 1 ? `${ps.n}. ` : '';
+        paras.push(`<w:p><w:pPr><w:spacing w:before="0" w:after="60"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">${esc(prefix + ps.text)}</w:t></w:r></w:p>`);
+      }
+    } else if (block.type === 'rule') {
+      paras.push(`<w:p><w:pPr><w:spacing w:before="120" w:after="60"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>${esc(block.num)}. ${esc(block.title)}</w:t></w:r></w:p>`);
+      if (block.desc) paras.push(`<w:p><w:pPr><w:jc w:val="both"/><w:spacing w:before="0" w:after="100"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">${esc(block.desc)}</w:t></w:r></w:p>`);
+    }
   }
 
   const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>
-    ${paras.join('\n')}
-    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1701"/></w:sectPr>
-  </w:body>
+  <w:body>${paras.join('\n')}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1701"/></w:sectPr></w:body>
 </w:document>`;
 
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -128,14 +132,11 @@ function makeDocxZip(title, subject, stepsWithDesc, rules, dept) {
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>`;
 
-  const wordRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
-
   return buildZip([
     ['[Content_Types].xml', contentTypes],
     ['_rels/.rels', rootRels],
     ['word/document.xml', docXml],
-    ['word/_rels/document.xml.rels', wordRels],
+    ['word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`],
   ]);
 }
 
@@ -146,16 +147,37 @@ export default async function handler(req, res) {
   const safeName = (name || 'процесс').toString();
 
   try {
-    // Генерируем описания шагов через Claude
-    const prompt = `У тебя есть шаги процесса "${safeName}". Для каждого шага напиши короткое название и развёрнутое описание как его выполнить — лаконично, в приказательной форме, с упоминанием инструментов.
+    const instrPrompt = `Ты составляешь процессную инструкцию для сотрудника.
+
+Правила:
+- Первый блок — intro: одно предложение когда инструкция вступает в силу
+- Далее шаги — только основные действия, без лишнего
+- Название шага: короткое, в приказательной форме (глагол-инфинитив)
+- Описание шага: 1-2 предложения, лаконично, в приказательной форме, упомяни инструменты если нужно
+- Если шаг может пойти не по плану — добавь protocol сразу после него
+- Протокол: короткое название + 1-3 шага (если шаг один — steps содержит один элемент)
+- НЕ включай в инструкцию правила поведения (вежливость, прощание) — это идёт в правила
+- НЕ дублируй шаги — объединяй похожие
 
 Верни ТОЛЬКО валидный JSON без markdown:
-[
-  { "title": "Краткое название шага", "desc": "Описание шага: как выполнить, что использовать." }
-]
+{
+  "instr": [
+    { "type": "intro", "text": "..." },
+    { "type": "step", "num": 1, "title": "...", "desc": "..." },
+    { "type": "protocol", "title": "...", "steps": [{ "n": 1, "text": "..." }] },
+    { "type": "step", "num": 2, "title": "...", "desc": "..." }
+  ],
+  "rules": [
+    { "type": "rule", "num": 1, "title": "...", "desc": "..." }
+  ]
+}
 
-Шаги:
-${(steps||[]).map((s,i) => `${i+1}. Действие: ${s.del} | Кто: ${s.byt} | Инструменты: ${s.imet}`).join('\n')}`;
+Процесс: ${safeName}
+Шаги НФ:
+${(steps||[]).map((s,i) => `${i+1}. ${s.del} | Кто: ${s.byt} | Инструменты: ${s.imet}`).join('\n')}
+
+Правила из НФ:
+${(rules||[]).map((r,i) => `${i+1}. ${r}`).join('\n')}`;
 
     const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -166,23 +188,22 @@ ${(steps||[]).map((s,i) => `${i+1}. Действие: ${s.del} | Кто: ${s.byt
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }]
+        max_tokens: 3000,
+        messages: [{ role: 'user', content: instrPrompt }]
       })
     });
 
     const aiData = await aiResp.json();
     const raw = (aiData.content||[]).map(b => b.text||'').join('');
-    const stepsWithDesc = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
 
-    // Файлы
     const xlsxContent = makeXlsx(safeName, ckp||'', steps);
-    const instrZip = makeDocxZip('Инструкция', `по ${safeName.toLowerCase()}`, stepsWithDesc, null, dept);
-    const rulesZip = makeDocxZip('Правила', `по ${safeName.toLowerCase()}`, null, rules||[], dept);
+    const instrZip = makeDocxZip('Инструкция', `по ${safeName.toLowerCase()}`, parsed.instr || [], dept);
+    const rulesZip = makeDocxZip('Правила', `по ${safeName.toLowerCase()}`, parsed.rules || [], dept);
 
     res.status(200).json({
       files: [
-        { name: `НФ_${safeName}.xls`, content: Buffer.from(xlsxContent, 'utf8').toString('base64'), icon: '📊' },
+        { name: `НФ_${safeName}.xls`, content: Buffer.from(xlsxContent,'utf8').toString('base64'), icon: '📊' },
         { name: `Инструкция_${safeName}.docx`, content: instrZip.toString('base64'), icon: '📄' },
         { name: `Правила_${safeName}.docx`, content: rulesZip.toString('base64'), icon: '📋' }
       ]
