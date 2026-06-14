@@ -4,45 +4,37 @@ export default async function handler(req, res) {
   const { steps, rules, ckp, name, dept } = req.body;
 
   try {
-    // Формируем НФ как CSV для xlsx
-    let nfCsv = '№,БЫТЬ,ДЕЛАТЬ,ИМЕТЬ\n';
-    steps.forEach((s, i) => {
-      const row = [i+1, s.byt, s.del, s.imet].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',');
-      nfCsv += row + '\n';
+    const safeName = (name || 'процесс').toString();
+
+    // НФ как CSV
+    let nfCsv = '\uFEFF№,БЫТЬ,ДЕЛАТЬ,ИМЕТЬ\n';
+    (steps || []).forEach((s, i) => {
+      const cols = [i+1, s.byt||'', s.del||'', s.imet||''];
+      nfCsv += cols.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',') + '\n';
     });
 
-    // Формируем текст инструкции
-    let instrText = `ИНСТРУКЦИЯ\n${name ? 'по ' + name.toLowerCase() : ''}\n\nЦКП: ${ckp}\n\n`;
-    steps.forEach((s, i) => {
-      instrText += `${i+1}. ${s.del}\n`;
+    // Инструкция
+    let instrText = `ИНСТРУКЦИЯ\nпо ${safeName.toLowerCase()}\n\nЦКП: ${ckp||''}\n\n`;
+    (steps || []).forEach((s, i) => {
+      instrText += `${i+1}. ${s.del||''}\n`;
       if (s.byt) instrText += `   Кто: ${s.byt}\n`;
       if (s.imet) instrText += `   Инструменты: ${s.imet}\n`;
       instrText += '\n';
     });
 
-    // Формируем текст правил
-    let rulesText = `ПРАВИЛА\n${name ? 'по ' + name.toLowerCase() : ''}\n\n`;
-    rules.forEach((r, i) => {
-      rulesText += `${i+1}. ${r}\n`;
+    // Правила
+    let rulesText = `ПРАВИЛА\nпо ${safeName.toLowerCase()}\n\n`;
+    (rules || []).forEach((r, i) => {
+      rulesText += `${i+1}. ${String(r)}\n`;
     });
+
+    const toBase64 = str => Buffer.from(str, 'utf8').toString('base64');
 
     res.status(200).json({
       files: [
-        {
-          name: `НФ_${name || 'процесс'}.csv`,
-          content: Buffer.from('\uFEFF' + nfCsv).toString('base64'),
-          icon: '📊'
-        },
-        {
-          name: `Инструкция_${name || 'процесс'}.txt`,
-          content: Buffer.from(instrText).toString('base64'),
-          icon: '📄'
-        },
-        {
-          name: `Правила_${name || 'процесс'}.txt`,
-          content: Buffer.from(rulesText).toString('base64'),
-          icon: '📋'
-        }
+        { name: `НФ_${safeName}.csv`, content: toBase64(nfCsv), icon: '📊' },
+        { name: `Инструкция_${safeName}.txt`, content: toBase64(instrText), icon: '📄' },
+        { name: `Правила_${safeName}.txt`, content: toBase64(rulesText), icon: '📋' }
       ]
     });
   } catch (e) {
