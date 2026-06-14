@@ -1,6 +1,3 @@
-import ExcelJS from 'exceljs';
-import { Document, Packer, Paragraph, TextRun, Header, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -8,132 +5,113 @@ export default async function handler(req, res) {
   const safeName = (name || 'процесс').toString();
 
   try {
-    // === XLSX ===
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('НФ');
+    // === XLSX через XML ===
+    const xmlRows = (steps || []).map((s, i) => `
+      <Row ss:Index="${i + 4}">
+        <Cell><Data ss:Type="Number">${i + 1}</Data></Cell>
+        <Cell><Data ss:Type="String">${esc(s.byt||'')}</Data></Cell>
+        <Cell><Data ss:Type="String">${esc(s.del||'')}</Data></Cell>
+        <Cell><Data ss:Type="String">${esc(s.imet||'')}</Data></Cell>
+      </Row>`).join('');
 
-    ws.mergeCells('A1:E1');
-    ws.getCell('A1').value = `Направляющая форма — ${safeName}`;
-    ws.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
-    ws.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C2C2A' } };
-    ws.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getRow(1).height = 32;
+    const xlsxXml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="НФ">
+    <Table>
+      <Row ss:Index="1">
+        <Cell ss:MergeAcross="3"><Data ss:Type="String">Направляющая форма — ${esc(safeName)}</Data></Cell>
+      </Row>
+      <Row ss:Index="2">
+        <Cell ss:MergeAcross="3"><Data ss:Type="String">ЦКП: ${esc(ckp||'')}</Data></Cell>
+      </Row>
+      <Row ss:Index="3">
+        <Cell><Data ss:Type="String">№</Data></Cell>
+        <Cell><Data ss:Type="String">БЫТЬ</Data></Cell>
+        <Cell><Data ss:Type="String">ДЕЛАТЬ</Data></Cell>
+        <Cell><Data ss:Type="String">ИМЕТЬ</Data></Cell>
+      </Row>
+      ${xmlRows}
+    </Table>
+  </Worksheet>
+</Workbook>`;
 
-    ws.mergeCells('A2:E2');
-    ws.getCell('A2').value = `ЦКП: ${ckp || ''}`;
-    ws.getCell('A2').font = { italic: true, size: 10 };
-    ws.getCell('A2').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1EFE8' } };
+    // === DOCX через XML ===
+    const makeDocx = (title, subject, paragraphs) => {
+      const paras = paragraphs.map(p => {
+        if (p.type === 'h1') return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="48"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
+        if (p.type === 'h2') return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="40"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
+        if (p.type === 'h3') return `<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
+        if (p.type === 'sub') return `<w:p><w:pPr><w:ind w:left="360"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>– ${esc(p.text)}</w:t></w:r></w:p>`;
+        if (p.type === 'empty') return `<w:p/>`;
+        return `<w:p><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
+      }).join('');
 
-    const headers = ['№', 'БЫТЬ', 'ДЕЛАТЬ', 'ИМЕТЬ', 'Комментарии'];
-    const headerRow = ws.getRow(3);
-    headers.forEach((h, i) => {
-      const cell = headerRow.getCell(i + 1);
-      cell.value = h;
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2C2C2A' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    });
-    headerRow.height = 30;
+      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>${paras}</w:body>
+</w:document>`;
 
+      const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+
+      const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+      const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+      return { xml, rels, contentTypes, rootRels };
+    };
+
+    // Инструкция
+    const instrParas = [
+      { type: 'h1', text: 'Инструкция' },
+      { type: 'h2', text: `по ${safeName.toLowerCase()}` },
+      { type: 'body', text: `ЦКП: ${ckp || ''}` },
+      { type: 'empty' },
+    ];
     (steps || []).forEach((s, i) => {
-      const row = ws.getRow(i + 4);
-      const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF1EFE8';
-      [i + 1, s.byt || '', s.del || '', s.imet || '', ''].forEach((v, ci) => {
-        const cell = row.getCell(ci + 1);
-        cell.value = v;
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
-        cell.alignment = { vertical: 'top', wrapText: true };
-        cell.font = { size: 11 };
-      });
-      row.height = 48;
+      instrParas.push({ type: 'h3', text: `${i + 1}. ${s.del || ''}` });
+      if (s.byt) instrParas.push({ type: 'sub', text: `Кто: ${s.byt}` });
+      if (s.imet) instrParas.push({ type: 'sub', text: `Инструменты: ${s.imet}` });
+      instrParas.push({ type: 'empty' });
     });
 
-    ws.columns = [
-      { width: 5 }, { width: 22 }, { width: 30 }, { width: 30 }, { width: 40 }
+    // Правила
+    const rulesParas = [
+      { type: 'h1', text: 'Правила' },
+      { type: 'h2', text: `по ${safeName.toLowerCase()}` },
+      { type: 'empty' },
     ];
-
-    const xlsxBuffer = await wb.xlsx.writeBuffer();
-
-    // === DOCX Инструкция ===
-    const FONT = 'Arial', BLACK = '000000';
-    const body = t => new Paragraph({
-      alignment: AlignmentType.BOTH, spacing: { before: 0, after: 0, line: 276 },
-      children: [new TextRun({ text: t, font: FONT, size: 24, color: BLACK })]
-    });
-    const h2 = t => new Paragraph({
-      heading: HeadingLevel.HEADING_2, alignment: AlignmentType.BOTH,
-      spacing: { before: 200, after: 120 },
-      children: [new TextRun({ text: t, font: FONT, size: 32, bold: true, color: BLACK })]
-    });
-    const h3 = (n, t) => new Paragraph({
-      heading: HeadingLevel.HEADING_3, alignment: AlignmentType.BOTH,
-      spacing: { before: 140, after: 80 },
-      children: [new TextRun({ text: `${n}. ${t}`, font: FONT, size: 28, bold: true, color: BLACK })]
-    });
-    const sub = t => new Paragraph({
-      alignment: AlignmentType.BOTH, spacing: { before: 0, after: 0, line: 276 },
-      indent: { left: 360 },
-      children: [new TextRun({ text: `\u2013 ${t}`, font: FONT, size: 24, color: BLACK })]
-    });
-    const empty = () => new Paragraph({ spacing: { before: 0, after: 0 }, children: [new TextRun('')] });
-
-    const instrChildren = [
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 100 }, children: [new TextRun({ text: 'Инструкция', font: FONT, size: 48, color: BLACK })] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100, after: 180 }, children: [new TextRun({ text: `по ${safeName.toLowerCase()}`, font: FONT, size: 40, color: BLACK })] }),
-      body(`ЦКП: ${ckp || ''}`),
-      empty(),
-    ];
-
-    (steps || []).forEach((s, i) => {
-      instrChildren.push(h3(i + 1, s.del || ''));
-      if (s.byt) instrChildren.push(sub(`Кто: ${s.byt}`));
-      if (s.imet) instrChildren.push(sub(`Инструменты: ${s.imet}`));
-      instrChildren.push(empty());
-    });
-
-    const instrDoc = new Document({
-      styles: { default: { document: { run: { font: FONT, size: 24, color: BLACK } } } },
-      sections: [{
-        properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 850, bottom: 1134, left: 1701 } } },
-        headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.LEFT, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'B4B2A9', space: 4 } }, children: [new TextRun({ text: dept || 'Отдел', font: FONT, size: 20, color: '888780' })] })] }) },
-        children: instrChildren
-      }]
-    });
-    const instrBuffer = await Packer.toBuffer(instrDoc);
-
-    // === DOCX Правила ===
-    const rulesChildren = [
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 100 }, children: [new TextRun({ text: 'Правила', font: FONT, size: 48, color: BLACK })] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100, after: 180 }, children: [new TextRun({ text: `по ${safeName.toLowerCase()}`, font: FONT, size: 40, color: BLACK })] }),
-      body(`Правила вступают в силу при выполнении процесса «${safeName}».`),
-      empty(),
-    ];
-
     (rules || []).forEach((r, i) => {
-      rulesChildren.push(h3(i + 1, r));
-      rulesChildren.push(empty());
+      rulesParas.push({ type: 'h3', text: `${i + 1}. ${r}` });
+      rulesParas.push({ type: 'empty' });
     });
 
-    const rulesDoc = new Document({
-      styles: { default: { document: { run: { font: FONT, size: 24, color: BLACK } } } },
-      sections: [{
-        properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 850, bottom: 1134, left: 1701 } } },
-        headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.LEFT, border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'B4B2A9', space: 4 } }, children: [new TextRun({ text: dept || 'Отдел', font: FONT, size: 20, color: '888780' })] })] }) },
-        children: rulesChildren
-      }]
-    });
-    const rulesBuffer = await Packer.toBuffer(rulesDoc);
-
-    const toBase64 = buf => buf.toString('base64');
+    const toBase64 = str => Buffer.from(str, 'utf8').toString('base64');
 
     res.status(200).json({
       files: [
-        { name: `НФ_${safeName}.xlsx`, content: toBase64(Buffer.from(xlsxBuffer)), icon: '📊' },
-        { name: `Инструкция_${safeName}.docx`, content: toBase64(instrBuffer), icon: '📄' },
-        { name: `Правила_${safeName}.docx`, content: toBase64(rulesBuffer), icon: '📋' }
+        { name: `НФ_${safeName}.xls`, content: toBase64(xlsxXml), icon: '📊' },
+        { name: `Инструкция_${safeName}.docx`, content: toBase64(makeDocx('', '', instrParas).xml), icon: '📄' },
+        { name: `Правила_${safeName}.docx`, content: toBase64(makeDocx('', '', rulesParas).xml), icon: '📋' }
       ]
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+}
+
+function esc(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
