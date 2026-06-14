@@ -1,3 +1,6 @@
+import * as XLSX from 'xlsx';
+import { Document, Packer, Paragraph, TextRun, Header, AlignmentType, HeadingLevel, BorderStyle } from 'docx';
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -5,113 +8,98 @@ export default async function handler(req, res) {
   const safeName = (name || 'процесс').toString();
 
   try {
-    // === XLSX через XML ===
-    const xmlRows = (steps || []).map((s, i) => `
-      <Row ss:Index="${i + 4}">
-        <Cell><Data ss:Type="Number">${i + 1}</Data></Cell>
-        <Cell><Data ss:Type="String">${esc(s.byt||'')}</Data></Cell>
-        <Cell><Data ss:Type="String">${esc(s.del||'')}</Data></Cell>
-        <Cell><Data ss:Type="String">${esc(s.imet||'')}</Data></Cell>
-      </Row>`).join('');
+    // === XLSX ===
+    const wb = XLSX.utils.book_new();
+    const wsData = [
+      [`Направляющая форма — ${safeName}`],
+      [`ЦКП: ${ckp || ''}`],
+      ['№', 'БЫТЬ', 'ДЕЛАТЬ', 'ИМЕТЬ'],
+      ...(steps || []).map((s, i) => [i + 1, s.byt || '', s.del || '', s.imet || ''])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 30 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'НФ');
+    const xlsxBuffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    const xlsxXml = `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Worksheet ss:Name="НФ">
-    <Table>
-      <Row ss:Index="1">
-        <Cell ss:MergeAcross="3"><Data ss:Type="String">Направляющая форма — ${esc(safeName)}</Data></Cell>
-      </Row>
-      <Row ss:Index="2">
-        <Cell ss:MergeAcross="3"><Data ss:Type="String">ЦКП: ${esc(ckp||'')}</Data></Cell>
-      </Row>
-      <Row ss:Index="3">
-        <Cell><Data ss:Type="String">№</Data></Cell>
-        <Cell><Data ss:Type="String">БЫТЬ</Data></Cell>
-        <Cell><Data ss:Type="String">ДЕЛАТЬ</Data></Cell>
-        <Cell><Data ss:Type="String">ИМЕТЬ</Data></Cell>
-      </Row>
-      ${xmlRows}
-    </Table>
-  </Worksheet>
-</Workbook>`;
+    // === DOCX helpers ===
+    const FONT = 'Arial', BLACK = '000000';
+    const body = t => new Paragraph({
+      alignment: AlignmentType.BOTH, spacing: { before: 0, after: 0, line: 276 },
+      children: [new TextRun({ text: t, font: FONT, size: 24, color: BLACK })]
+    });
+    const h3 = (n, t) => new Paragraph({
+      heading: HeadingLevel.HEADING_3, alignment: AlignmentType.BOTH,
+      spacing: { before: 140, after: 80 },
+      children: [new TextRun({ text: `${n}. ${t}`, font: FONT, size: 28, bold: true, color: BLACK })]
+    });
+    const sub = t => new Paragraph({
+      alignment: AlignmentType.BOTH, spacing: { before: 0, after: 0, line: 276 },
+      indent: { left: 360 },
+      children: [new TextRun({ text: `\u2013 ${t}`, font: FONT, size: 24, color: BLACK })]
+    });
+    const empty = () => new Paragraph({ spacing: { before: 0, after: 0 }, children: [new TextRun('')] });
+    const center = (t, size) => new Paragraph({
+      alignment: AlignmentType.CENTER, spacing: { before: 0, after: 100 },
+      children: [new TextRun({ text: t, font: FONT, size, color: BLACK })]
+    });
+    const makeHeader = () => new Header({
+      children: [new Paragraph({
+        alignment: AlignmentType.LEFT,
+        border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'B4B2A9', space: 4 } },
+        children: [new TextRun({ text: dept || 'Отдел', font: FONT, size: 20, color: '888780' })]
+      })]
+    });
+    const pageProps = { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 850, bottom: 1134, left: 1701 } } };
+    const styles = { default: { document: { run: { font: FONT, size: 24, color: BLACK } } } };
 
-    // === DOCX через XML ===
-    const makeDocx = (title, subject, paragraphs) => {
-      const paras = paragraphs.map(p => {
-        if (p.type === 'h1') return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="48"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
-        if (p.type === 'h2') return `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="40"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
-        if (p.type === 'h3') return `<w:p><w:r><w:rPr><w:b/><w:sz w:val="28"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
-        if (p.type === 'sub') return `<w:p><w:pPr><w:ind w:left="360"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>– ${esc(p.text)}</w:t></w:r></w:p>`;
-        if (p.type === 'empty') return `<w:p/>`;
-        return `<w:p><w:r><w:rPr><w:sz w:val="24"/></w:rPr><w:t>${esc(p.text)}</w:t></w:r></w:p>`;
-      }).join('');
-
-      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:body>${paras}</w:body>
-</w:document>`;
-
-      const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`;
-
-      const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`;
-
-      const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`;
-
-      return { xml, rels, contentTypes, rootRels };
-    };
-
-    // Инструкция
-    const instrParas = [
-      { type: 'h1', text: 'Инструкция' },
-      { type: 'h2', text: `по ${safeName.toLowerCase()}` },
-      { type: 'body', text: `ЦКП: ${ckp || ''}` },
-      { type: 'empty' },
+    // === Инструкция ===
+    const instrChildren = [
+      center('Инструкция', 48),
+      center(`по ${safeName.toLowerCase()}`, 40),
+      body(`ЦКП: ${ckp || ''}`),
+      empty(),
     ];
     (steps || []).forEach((s, i) => {
-      instrParas.push({ type: 'h3', text: `${i + 1}. ${s.del || ''}` });
-      if (s.byt) instrParas.push({ type: 'sub', text: `Кто: ${s.byt}` });
-      if (s.imet) instrParas.push({ type: 'sub', text: `Инструменты: ${s.imet}` });
-      instrParas.push({ type: 'empty' });
+      instrChildren.push(h3(i + 1, s.del || ''));
+      if (s.byt) instrChildren.push(sub(`Кто: ${s.byt}`));
+      if (s.imet) instrChildren.push(sub(`Инструменты: ${s.imet}`));
+      instrChildren.push(empty());
     });
 
-    // Правила
-    const rulesParas = [
-      { type: 'h1', text: 'Правила' },
-      { type: 'h2', text: `по ${safeName.toLowerCase()}` },
-      { type: 'empty' },
+    const instrDoc = new Document({
+      styles,
+      sections: [{ properties: pageProps, headers: { default: makeHeader() }, children: instrChildren }]
+    });
+    const instrBuffer = await Packer.toBuffer(instrDoc);
+
+    // === Правила ===
+    const rulesChildren = [
+      center('Правила', 48),
+      center(`по ${safeName.toLowerCase()}`, 40),
+      body(`Правила вступают в силу при выполнении процесса «${safeName}».`),
+      empty(),
     ];
     (rules || []).forEach((r, i) => {
-      rulesParas.push({ type: 'h3', text: `${i + 1}. ${r}` });
-      rulesParas.push({ type: 'empty' });
+      rulesChildren.push(h3(i + 1, String(r)));
+      rulesChildren.push(empty());
     });
 
-    const toBase64 = str => Buffer.from(str, 'utf8').toString('base64');
+    const rulesDoc = new Document({
+      styles,
+      sections: [{ properties: pageProps, headers: { default: makeHeader() }, children: rulesChildren }]
+    });
+    const rulesBuffer = await Packer.toBuffer(rulesDoc);
+
+    const toBase64 = buf => Buffer.from(buf).toString('base64');
 
     res.status(200).json({
       files: [
-        { name: `НФ_${safeName}.xls`, content: toBase64(xlsxXml), icon: '📊' },
-        { name: `Инструкция_${safeName}.docx`, content: toBase64(makeDocx('', '', instrParas).xml), icon: '📄' },
-        { name: `Правила_${safeName}.docx`, content: toBase64(makeDocx('', '', rulesParas).xml), icon: '📋' }
+        { name: `НФ_${safeName}.xlsx`, content: toBase64(xlsxBuffer), icon: '📊' },
+        { name: `Инструкция_${safeName}.docx`, content: toBase64(instrBuffer), icon: '📄' },
+        { name: `Правила_${safeName}.docx`, content: toBase64(rulesBuffer), icon: '📋' }
       ]
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-}
-
-function esc(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
